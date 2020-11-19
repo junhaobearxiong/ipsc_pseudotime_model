@@ -5,6 +5,7 @@ different from classfic MFA in that each mixture has a specific noise
 import pymc3 as pm
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
 
 class MixtureFA(object):
     def __init__(self, Y, name, K, trace_iter=1000, advi_iter=10000, output_dir='outputs/'):
@@ -58,6 +59,10 @@ class MixtureFA(object):
 
             # inference via ADVI
             self.mean_field = pm.fit(method='advi', n=self.advi_iter)
+
+            # convergence plot
+            plt.plot(self.mean_field.hist)
+            plt.savefig(self.output_dir + self.name + '_elbo.png')
 
         # with open(self.output_dir + self.name + '_model', 'wb') as f:
         #    pickle.dump(self.mean_field, f)
