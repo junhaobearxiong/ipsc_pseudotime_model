@@ -58,7 +58,7 @@ class MixtureFA(object):
             lik = pm.Mixture('lik', w=PI, comp_dists=components, observed=self.Y, shape=(self.N, self.G))
 
             # inference via ADVI
-            self.mean_field = pm.fit(method='advi', n=self.advi_iter)
+            self.mean_field = pm.fit(method='advi', n=self.advi_iter, callbacks=[pm.callbacks.CheckParametersConvergence(diff='absolute')])
 
             # convergence plot
             plt.plot(self.mean_field.hist)
