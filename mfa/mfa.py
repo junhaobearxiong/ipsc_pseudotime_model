@@ -43,7 +43,7 @@ class MixtureFA(object):
             V = pm.Normal('V', mu=0, sigma=1, shape=(1, self.G, self.K))
             MU = pm.Normal('MU', mu=0, sigma=1, shape=(self.G, self.K))
             PI = pm.Dirichlet('PI', a=np.ones(self.K))
-            # TODO: initialize with variance as 1, might need more sensible initializations
+            # TODO: initializing with variance as 1, might need more sensible initializations
             SIGMA = pm.HalfCauchy('SIGMA', beta=5, shape=(1, self.G, self.K), testval=np.ones((1, self.G, self.K)))
             
             # TODO: initialize with list is not recommended by tutorial
