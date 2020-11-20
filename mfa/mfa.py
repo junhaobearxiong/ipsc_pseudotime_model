@@ -6,9 +6,11 @@ import pymc3 as pm
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
 
 class MixtureFA(object):
-    def __init__(self, Y, name, K, trace_iter=1000, advi_iter=10000, output_dir='outputs/'):
+    def __init__(self, Y, name, K, trace_iter=1000, advi_iter=10000, output_dir='outputs/', smart_init=False):
         """
         Params
         ------
@@ -19,6 +21,7 @@ class MixtureFA(object):
         K: number of mixture
         advi_iter: number of iterations for ADVI
         trace_iter: number of samples to generate from posterior distribution
+        smart_init: whether to use "smart" initialization for the model, e.g. PC1 for TAU
         """
         self.Y = Y
         self.name = name
@@ -27,6 +30,13 @@ class MixtureFA(object):
         self.trace_iter = trace_iter
         self.advi_iter = advi_iter
         self.output_dir = output_dir
+        self.smart_init = smart_init
+        # use to name the files saved for the model
+        self.fname = self.output_dir + self.name
+        if self.smart_init:
+            self.fname += '_initPC'
+
+        self.initialize_variables()
 
 
     def fit(self):
@@ -39,12 +49,12 @@ class MixtureFA(object):
         PI: (K,), mixing coefficients
         """
         with pm.Model() as mfa:
-            TAU = pm.Normal('TAU', mu=0, sigma=1, shape=(self.N, 1))
+            TAU = pm.Normal('TAU', mu=0, sigma=1, shape=(self.N, 1), testval=self.tau_init)
             V = pm.Normal('V', mu=0, sigma=1, shape=(1, self.G, self.K))
             MU = pm.Normal('MU', mu=0, sigma=1, shape=(self.G, self.K))
             PI = pm.Dirichlet('PI', a=np.ones(self.K))
             # TODO: initializing with variance as 1, might need more sensible initializations
-            SIGMA = pm.HalfCauchy('SIGMA', beta=5, shape=(1, self.G, self.K), testval=np.ones((1, self.G, self.K)))
+            SIGMA = pm.HalfCauchy('SIGMA', beta=5, shape=(1, self.G, self.K), testval=self.sigma_init)
             
             # TODO: initialize with list is not recommended by tutorial
             components = [
@@ -58,14 +68,23 @@ class MixtureFA(object):
             lik = pm.Mixture('lik', w=PI, comp_dists=components, observed=self.Y, shape=(self.N, self.G))
 
             # inference via ADVI
-            self.mean_field = pm.fit(method='advi', n=self.advi_iter, callbacks=[pm.callbacks.CheckParametersConvergence(diff='absolute')])
+            advi = pm.ADVI()
+            #tracker = pm.callbacks.Tracker(
+            #    tau=advi.approx.TAU.eval
+            #)
+            self.mean_field = advi.fit(self.advi_iter, callbacks=[pm.callbacks.CheckParametersConvergence(diff='absolute')])
 
             # convergence plot
             plt.plot(self.mean_field.hist)
-            plt.savefig(self.output_dir + self.name + '_elbo.png')
+            plt.savefig(self.fname + '_loss.png')
 
-        # with open(self.output_dir + self.name + '_model', 'wb') as f:
-        #    pickle.dump(self.mean_field, f)
+
+    def initialize_variables(self):
+        self.tau_init = np.zeros((self.N, 1))
+        self.sigma_init = np.ones((1, self.G, self.K))
+        if self.smart_init:
+            self.tau_init = PCA(n_components=1).fit_transform(self.Y)
+            print('initialize tau with pc1')
 
 
     def get_posterior(self):
@@ -82,7 +101,7 @@ class MixtureFA(object):
         self.posterior['PI'] = trace['PI'].mean(axis=0)
         self.posterior['R'] = self.get_indicator_posterior()
 
-        with open(self.output_dir + self.name + '_posterior.pkl', 'wb') as f:
+        with open(self.fname + '_posterior.pkl', 'wb') as f:
             pickle.dump(self.posterior, f)
 
 
