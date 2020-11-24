@@ -52,20 +52,29 @@ class MixtureFA(object):
             TAU = pm.Normal('TAU', mu=0, sigma=1, shape=(self.N, 1), testval=self.tau_init)
             V = pm.Normal('V', mu=0, sigma=1, shape=(1, self.G, self.K))
             MU = pm.Normal('MU', mu=0, sigma=1, shape=(self.G, self.K))
-            PI = pm.Dirichlet('PI', a=np.ones(self.K))
             # TODO: initializing with variance as 1, might need more sensible initializations
             SIGMA = pm.HalfCauchy('SIGMA', beta=5, shape=(1, self.G, self.K), testval=self.sigma_init)
             
-            # TODO: initialize with list is not recommended by tutorial
-            components = [
-                pm.Normal.dist(
-                               mu=MU[..., k] + pm.math.dot(TAU, V[..., k]),
-                               sigma=pm.math.dot(np.ones((self.N, 1)), SIGMA[..., k]),
-                               shape=(self.N, self.G)
+            # pymc3 doesn't allow Dirichlet to be initialized with K=1
+            if self.K > 1:
+                PI = pm.Dirichlet('PI', a=np.ones(self.K))
+                # TODO: initialize with list is not recommended by tutorial
+                components = [
+                    pm.Normal.dist(
+                                   mu=MU[..., k] + pm.math.dot(TAU, V[..., k]),
+                                   sigma=pm.math.dot(np.ones((self.N, 1)), SIGMA[..., k]),
+                                   shape=(self.N, self.G)
+                    )
+                    for k in range(self.K)
+                ]
+                lik = pm.Mixture('lik', w=PI, comp_dists=components, observed=self.Y, shape=(self.N, self.G))
+            else:
+                lik = pm.Normal(
+                        'lik', mu=MU[..., 0] + pm.math.dot(TAU, V[..., 0]),
+                        sigma=pm.math.dot(np.ones((self.N, 1)), SIGMA[..., 0]),
+                        observed=self.Y,
+                        shape=(self.N, self.G)
                 )
-                for k in range(self.K)
-            ]
-            lik = pm.Mixture('lik', w=PI, comp_dists=components, observed=self.Y, shape=(self.N, self.G))
 
             # inference via ADVI
             advi = pm.ADVI()
@@ -98,8 +107,9 @@ class MixtureFA(object):
         self.posterior['TAU'] = trace['TAU'].mean(axis=0)
         self.posterior['V'] = trace['V'].mean(axis=0)
         self.posterior['SIGMA'] = trace['SIGMA'].mean(axis=0)
-        self.posterior['PI'] = trace['PI'].mean(axis=0)
-        self.posterior['R'] = self.get_indicator_posterior()
+        if self.K > 1:
+            self.posterior['PI'] = trace['PI'].mean(axis=0)
+            self.posterior['R'] = self.get_indicator_posterior()
 
         with open(self.fname + '_posterior.pkl', 'wb') as f:
             pickle.dump(self.posterior, f)
