@@ -3,6 +3,7 @@ from numpy import matmul, trace
 from numpy.linalg import *
 from scipy.stats import multivariate_normal
 import math
+import pymc3 as pm
 
 # K is the dim of latent variable z
 # z ~ N(0,I), x|z ~ N(Wz+mu, sigma2*I)
@@ -13,11 +14,15 @@ import math
 # Assume X is of size DxN
 # Return an (N,) array
 def calGassuianProb(X,mu,cov):
-	mu = np.array(mu).reshape((-1,1))  # Dx1
+	# mu = np.array(mu).reshape((-1,1))  # Dx1
 	D = len(mu)
 	cov = np.array(cov).reshape(D,D)
+	'''
 	X_mu = X - mu  # DxN
 	return np.exp ( - (np.log(np.linalg.det(cov)) + np.diag(np.matmul(np.matmul(X_mu.T,inv(cov)),X_mu)) + D*np.log(2*np.pi)) / 2 )
+	'''
+	mv = multivariate_normal(mean=mu, cov=cov)
+	return mv.pdf(X.T)
 
 
 # X is of dim (D,N), where N is number of data points
@@ -177,8 +182,7 @@ def fa_inference(X,mu,W,psi):
 # 	mu, (M,D)
 # 	W, (M,D,K)
 # 	psi, (D,)
-def mfa_em(X,K,M):
-	itr_num = 30
+def mfa_em(X,K,M, itr_num=30):
 	X = np.array(X)
 	D, N = X.shape
 	assert(K<=D and K>0)
@@ -193,6 +197,7 @@ def mfa_em(X,K,M):
 	psi = np.array([0.1]*D).reshape((1,-1))  # 1xD matrix, interpreted as uniqueness, this parameter is SHARED for all mixtures
 
 	for itr in range(itr_num):
+		# print('iteration {}'.format(itr))
 		# ===== Expectation Stage (Calculating the posterior statistics, based on old parameters)
 		# H is of size MxN, where hij is the prob of xj been in mixture j
 		H = np.zeros((M,N))
@@ -221,8 +226,10 @@ def mfa_em(X,K,M):
 		# Avoiding bad sample that has prob=0 for all mixtures, if it happens, set equal prob.
 		sumH = np.sum(H,axis=0)  # (N,)
 		zero_idx = [ i for (i,v) in enumerate(sumH) if v<1e-15]
-		H[:,zero_idx] += np.array([1.0]*D).reshape((-1,1))/D
-		sumH[zero_idx] = 1
+		if len(zero_idx) > 0:
+			#H[:,zero_idx] += np.array([1.0]*D).reshape((-1,1))/D
+			H[:, zero_idx] = 1 / M
+			sumH[zero_idx] = 1
 		H = H/sumH.reshape((1,-1))  # Should avoid divid by zero
 
 		X_mu = []  # MxDxN matrix

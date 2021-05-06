@@ -10,7 +10,7 @@ from sklearn.decomposition import PCA
 
 
 class MixtureFA(object):
-    def __init__(self, Y, name, K, trace_iter=1000, advi_iter=10000, output_dir='outputs/', smart_init=False):
+    def __init__(self, Y, name, K, trace_iter=1000, advi_iter=10000, output_dir='outputs/', smart_init=False, save=False):
         """
         Params
         ------
@@ -22,6 +22,7 @@ class MixtureFA(object):
         advi_iter: number of iterations for ADVI
         trace_iter: number of samples to generate from posterior distribution
         smart_init: whether to use "smart" initialization for the model, e.g. PC1 for TAU
+        save: whether to save output
         """
         self.Y = Y
         self.name = name
@@ -31,6 +32,7 @@ class MixtureFA(object):
         self.advi_iter = advi_iter
         self.output_dir = output_dir
         self.smart_init = smart_init
+        self.save = save
         # use to name the files saved for the model
         self.fname = self.output_dir + self.name
         if self.smart_init:
@@ -69,6 +71,7 @@ class MixtureFA(object):
                 ]
                 lik = pm.Mixture('lik', w=PI, comp_dists=components, observed=self.Y, shape=(self.N, self.G))
             else:
+                # when K=1, the model is an FA with 1 latent dimension
                 lik = pm.Normal(
                         'lik', mu=MU[..., 0] + pm.math.dot(TAU, V[..., 0]),
                         sigma=pm.math.dot(np.ones((self.N, 1)), SIGMA[..., 0]),
@@ -85,7 +88,9 @@ class MixtureFA(object):
 
             # convergence plot
             plt.plot(self.mean_field.hist)
-            plt.savefig(self.fname + '_loss.png')
+            plt.title('loss: {:.4f}'.format(self.mean_field.hist[-1]))
+            if self.save:
+                plt.savefig(self.fname + '_loss.png')
 
 
     def initialize_variables(self):
@@ -111,8 +116,9 @@ class MixtureFA(object):
             self.posterior['PI'] = trace['PI'].mean(axis=0)
             self.posterior['R'] = self.get_indicator_posterior()
 
-        with open(self.fname + '_posterior.pkl', 'wb') as f:
-            pickle.dump(self.posterior, f)
+        if self.save:
+            with open(self.fname + '_posterior.pkl', 'wb') as f:
+                pickle.dump(self.posterior, f)
 
 
     def get_indicator_posterior(self):

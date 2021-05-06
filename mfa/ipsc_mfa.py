@@ -21,4 +21,4 @@ mfa = MixtureFA(Y=Y, name='ipsc_{}_K{}'.format(args.name, args.K), K=args.K, adv
     smart_init=args.smart_init)
 mfa.fit()
 mfa.get_posterior()
-print('Total hours: {:4f}hrs'.format((time.time() - start_time) / 3600))
+print('Total hours: {:.4f}hrs'.format((time.time() - start_time) / 3600))
